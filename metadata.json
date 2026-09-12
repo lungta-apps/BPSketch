@@ -1,0 +1,6 @@
+{
+  "name": "Apex Blueprint Scaler",
+  "description": "Calibrate blueprint PDFs and images to 1:1 scale with 96 DPI metadata for direct tracing in Apex Sketch.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
