@@ -7,13 +7,12 @@ import { ApexGridPreviewModal } from './components/ApexGridPreviewModal';
 import { ApexGuideModal } from './components/ApexGuideModal';
 import { Point2D, BlueprintAdjustments, CalibrationCalculation, CropArea, PdfPageInfo } from './types';
 import { parseDimension } from './utils/dimensionParser';
-import { generateSampleBlueprint } from './utils/sampleBlueprint';
 import { renderPdfPage } from './utils/pdfRenderer';
 
 export default function App() {
   // Source Blueprint State
   const [sourceImage, setSourceImage] = useState<HTMLCanvasElement | HTMLImageElement | null>(null);
-  const [fileName, setFileName] = useState<string>('Sample_Residential_Blueprint.png');
+  const [fileName, setFileName] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [loadingMessage, setLoadingMessage] = useState<string>('');
 
@@ -23,7 +22,7 @@ export default function App() {
 
   // Calibration points & known distance
   const [points, setPoints] = useState<Point2D[]>([]);
-  const [knownFeetInput, setKnownFeetInput] = useState<string>('48');
+  const [knownFeetInput, setKnownFeetInput] = useState<string>('');
 
   // Blueprint Adjustments & Crop
   const [adjustments, setAdjustments] = useState<BlueprintAdjustments>({
@@ -47,20 +46,6 @@ export default function App() {
   const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
   const [isGuideModalOpen, setIsGuideModalOpen] = useState<boolean>(false);
   const [isAdjustmentsOpen, setIsAdjustmentsOpen] = useState<boolean>(true);
-
-  // Load sample blueprint on initial mount
-  useEffect(() => {
-    const sample = generateSampleBlueprint();
-    setSourceImage(sample);
-    setFileName('Sample_Residential_Blueprint.png');
-    // Pre-seed points on the 48'-0" north wall of the sample blueprint
-    // (In sampleBlueprint: ox = 400, oy = 350, wallW1 = 1200)
-    setPoints([
-      { x: 400, y: 350 },
-      { x: 1600, y: 350 },
-    ]);
-    setKnownFeetInput('48');
-  }, []);
 
   // Compute live calibration telemetry
   const calculation = useMemo<CalibrationCalculation | null>(() => {
@@ -99,27 +84,6 @@ export default function App() {
       calibratedHeight,
     };
   }, [points, knownFeetInput, sourceImage, cropArea]);
-
-  // Load Sample Blueprint
-  const handleLoadSample = useCallback(() => {
-    setIsLoading(true);
-    setLoadingMessage('Loading sample blueprint...');
-    setTimeout(() => {
-      const sample = generateSampleBlueprint();
-      setSourceImage(sample);
-      setFileName('Sample_Residential_Blueprint.png');
-      setPdfData(null);
-      setPdfInfo(null);
-      setPoints([
-        { x: 400, y: 350 },
-        { x: 1600, y: 350 },
-      ]);
-      setKnownFeetInput('48');
-      setCropArea({ active: false, x: 0, y: 0, width: 0, height: 0 });
-      setIsCropMode(false);
-      setIsLoading(false);
-    }, 100);
-  }, []);
 
   // Handle file upload (PDF or Image)
   const handleFileSelect = useCallback(async (file: File) => {
@@ -229,6 +193,10 @@ export default function App() {
 
   // Reset current blueprint state
   const handleReset = () => {
+    setSourceImage(null);
+    setFileName('');
+    setPdfData(null);
+    setPdfInfo(null);
     setPoints([]);
     setKnownFeetInput('');
     setCropArea({ active: false, x: 0, y: 0, width: 0, height: 0 });
@@ -246,7 +214,6 @@ export default function App() {
     <div className="flex flex-col h-screen w-screen bg-slate-950 text-slate-100 overflow-hidden font-sans">
       {/* Top Header */}
       <Header
-        onLoadSample={handleLoadSample}
         onOpenGuide={() => setIsGuideModalOpen(true)}
         onFileSelect={handleFileSelect}
         hasImageLoaded={Boolean(sourceImage)}
@@ -278,6 +245,7 @@ export default function App() {
           isCropMode={isCropMode}
           setIsCropMode={setIsCropMode}
           knownFeetInput={knownFeetInput}
+          onFileSelect={handleFileSelect}
         />
 
         {/* Adjustments & Multi-page PDF Controls */}

@@ -15,6 +15,8 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  FileUp,
+  UploadCloud,
 } from 'lucide-react';
 
 interface BlueprintCanvasProps {
@@ -28,6 +30,7 @@ interface BlueprintCanvasProps {
   isCropMode: boolean;
   setIsCropMode: (mode: boolean) => void;
   knownFeetInput: string;
+  onFileSelect?: (file: File) => void;
 }
 
 export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
@@ -41,10 +44,15 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
   isCropMode,
   setIsCropMode,
   knownFeetInput,
+  onFileSelect,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const loupeCanvasRef = useRef<HTMLCanvasElement>(null);
+  const dropInputRef = useRef<HTMLInputElement>(null);
+
+  // Drag-and-drop state
+  const [isDragOver, setIsDragOver] = useState(false);
 
   // Transform state (Pan & Zoom)
   const [scale, setScale] = useState(1);
@@ -646,31 +654,97 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
   return (
     <div
       ref={containerRef}
-      className="relative flex-1 w-full h-full overflow-hidden bg-slate-950 select-none cursor-crosshair"
+      className={`relative flex-1 w-full h-full overflow-hidden bg-slate-950 select-none cursor-crosshair transition-colors ${
+        isDragOver ? 'ring-2 ring-blue-500 ring-inset bg-slate-900/50' : ''
+      }`}
       onWheel={handleWheel}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onContextMenu={(e) => e.preventDefault()}
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!isDragOver) setIsDragOver(true);
+      }}
+      onDragEnter={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragOver(true);
+      }}
+      onDragLeave={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragOver(false);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragOver(false);
+        const file = e.dataTransfer.files?.[0];
+        if (file && onFileSelect) {
+          onFileSelect(file);
+        }
+      }}
     >
+      {/* Hidden file input for empty state click */}
+      <input
+        type="file"
+        ref={dropInputRef}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file && onFileSelect) {
+            onFileSelect(file);
+            e.target.value = '';
+          }
+        }}
+        accept="application/pdf,image/png,image/jpeg,image/webp,image/tiff"
+        className="hidden"
+      />
+
       {/* Main High-Performance Canvas */}
       <canvas ref={canvasRef} className="absolute inset-0 w-full h-full block" />
 
       {/* Empty State Banner */}
       {!sourceImage && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center pointer-events-none">
-          <div className="w-16 h-16 rounded-2xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center text-blue-400 mb-4">
-            <Crosshair className="w-8 h-8" />
+        <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center z-10 pointer-events-auto">
+          <div
+            onClick={() => dropInputRef.current?.click()}
+            className="w-full max-w-lg p-8 rounded-2xl bg-slate-900/90 border-2 border-dashed border-slate-700 hover:border-blue-500 hover:bg-slate-900 transition-all duration-200 cursor-pointer flex flex-col items-center shadow-2xl backdrop-blur-sm group"
+          >
+            <div className="w-16 h-16 rounded-2xl bg-blue-600/10 border border-blue-500/20 group-hover:scale-105 group-hover:bg-blue-600/20 flex items-center justify-center text-blue-400 mb-4 transition-all">
+              <UploadCloud className="w-8 h-8" />
+            </div>
+            <h2 className="text-lg font-semibold text-slate-100 mb-1">
+              Upload Architectural Blueprint
+            </h2>
+            <p className="text-xs text-slate-400 max-w-sm mb-5 leading-relaxed">
+              Drag and drop your PDF blueprint or high-res image here, or click to browse from your computer.
+            </p>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                dropInputRef.current?.click();
+              }}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white transition shadow-md shadow-blue-600/20 cursor-pointer"
+            >
+              <FileUp className="w-4 h-4" />
+              <span>Select Blueprint File</span>
+            </button>
+
+            <div className="mt-6 pt-5 border-t border-slate-800/80 w-full flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-slate-400 font-mono">
+              <span>Supports PDF, PNG, JPG, TIFF</span>
+              <span className="text-blue-400 bg-blue-950/80 px-2.5 py-0.5 rounded border border-blue-800/50">
+                1:1 Scale @ 96 DPI for Apex v7
+              </span>
+            </div>
           </div>
-          <h2 className="text-base font-semibold text-slate-200 mb-1">
-            No Blueprint Loaded
-          </h2>
-          <p className="text-xs text-slate-400 max-w-md mb-4 leading-relaxed">
-            Upload an architectural blueprint PDF or screenshot, or click &quot;Sample Plan&quot; above to see 1:1 Apex Sketch calibration in action.
+
+          <p className="text-xs text-slate-400 mt-4">
+            Tip: You can also take a screenshot (<kbd className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono text-[10px] border border-slate-700">Win+Shift+S</kbd>) and paste with <kbd className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono text-[10px] border border-slate-700">Ctrl+V</kbd>
           </p>
-          <span className="text-[11px] text-blue-400 font-mono bg-blue-950/60 px-3 py-1 rounded-full border border-blue-800/60">
-            Rule: 1 Foot on Apex Grid = 9.6 Pixels @ 96 DPI
-          </span>
         </div>
       )}
 

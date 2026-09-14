@@ -1,8 +1,7 @@
 import React from 'react';
-import { Ruler, FileUp, HelpCircle, Sparkles, RefreshCw } from 'lucide-react';
+import { Ruler, FileUp, HelpCircle, RefreshCw } from 'lucide-react';
 
 interface HeaderProps {
-  onLoadSample: () => void;
   onOpenGuide: () => void;
   onFileSelect: (file: File) => void;
   hasImageLoaded: boolean;
@@ -10,7 +9,6 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  onLoadSample,
   onOpenGuide,
   onFileSelect,
   hasImageLoaded,
@@ -67,17 +65,6 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <FileUp className="w-4 h-4" />
             <span>Upload Blueprint (PDF/IMG)</span>
-          </button>
-
-          <button
-            id="btn-load-sample"
-            type="button"
-            onClick={onLoadSample}
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition cursor-pointer"
-            title="Load sample floor plan to test calibration instantly"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            <span>Sample Plan</span>
           </button>
 
           {hasImageLoaded && (
