@@ -55,21 +55,47 @@ export const AdjustmentsPanel: React.FC<AdjustmentsPanelProps> = ({
     });
   };
 
+  if (!isOpen) {
+    return (
+      <button
+        type="button"
+        onClick={onToggle}
+        className="hidden md:flex flex-col items-center justify-center gap-2 px-2.5 py-4 bg-slate-900 hover:bg-slate-800 border-l border-slate-800 text-slate-400 hover:text-slate-100 transition cursor-pointer z-10 select-none shrink-0 group"
+        title="Open Blueprint Image Controls (Rotate, Invert, Multi-page PDF)"
+      >
+        <Sliders className="w-4 h-4 text-blue-400 group-hover:scale-110 transition-transform" />
+        <span className="text-[10px] font-bold uppercase tracking-wider [writing-mode:vertical-lr] rotate-180 text-slate-400 group-hover:text-slate-200">
+          Filters & Controls
+        </span>
+      </button>
+    );
+  }
+
   return (
-    <div className="bg-slate-900 border-t md:border-t-0 md:border-l border-slate-800 text-slate-200 w-full md:w-72 shrink-0 flex flex-col z-10 select-none">
+    <div className="bg-slate-900 border-t md:border-t-0 md:border-l border-slate-800 text-slate-200 w-full md:w-72 shrink-0 flex flex-col z-10 select-none shadow-xl">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
         <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-300">
           <Sliders className="w-4 h-4 text-blue-400" />
-          <span>Blueprint Controls</span>
+          <span>Image Controls</span>
         </div>
-        <button
-          type="button"
-          onClick={resetAdjustments}
-          className="text-[11px] text-slate-400 hover:text-white transition cursor-pointer"
-        >
-          Reset All
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={resetAdjustments}
+            className="text-[11px] text-slate-400 hover:text-white transition cursor-pointer"
+          >
+            Reset
+          </button>
+          <button
+            type="button"
+            onClick={onToggle}
+            className="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-800 transition cursor-pointer"
+            title="Collapse panel"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       <div className="p-4 flex flex-col gap-5 overflow-y-auto max-h-[calc(100vh-140px)]">

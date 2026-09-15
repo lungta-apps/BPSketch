@@ -17,6 +17,10 @@ import {
   ChevronRight,
   FileUp,
   UploadCloud,
+  CheckCircle2,
+  Check,
+  X,
+  RotateCcw,
 } from 'lucide-react';
 
 interface BlueprintCanvasProps {
@@ -30,6 +34,12 @@ interface BlueprintCanvasProps {
   isCropMode: boolean;
   setIsCropMode: (mode: boolean) => void;
   knownFeetInput: string;
+  onKnownFeetChange: (val: string) => void;
+  showApexGrid: boolean;
+  onToggleApexGrid: () => void;
+  onApplyCrop?: () => void;
+  onResetCrop?: () => void;
+  hasCropApplied?: boolean;
   onFileSelect?: (file: File) => void;
 }
 
@@ -44,6 +54,12 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
   isCropMode,
   setIsCropMode,
   knownFeetInput,
+  onKnownFeetChange,
+  showApexGrid,
+  onToggleApexGrid,
+  onApplyCrop,
+  onResetCrop,
+  hasCropApplied = false,
   onFileSelect,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -63,7 +79,6 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
 
   // Tool modes & toggles
   const [activeTool, setActiveTool] = useState<'calibrate' | 'pan'>('calibrate');
-  const [showApexGrid, setShowApexGrid] = useState(false);
   const [showLoupe, setShowLoupe] = useState(true);
   const [hoveredPointIndex, setHoveredPointIndex] = useState<number | null>(null);
   const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(null);
@@ -74,10 +89,27 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
   // Crop drag state
   const [cropDragStart, setCropDragStart] = useState<Point2D | null>(null);
 
-  // Monitor Shift key for orthogonal snapping
+  // Monitor keyboard shortcuts: Shift snapping, arrow nudging, and Enter/Escape for crop
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Shift') setIsShiftPressed(true);
+
+      // Crop Mode shortcuts: Enter to confirm crop, Escape to cancel
+      if (isCropMode) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (cropArea.active && cropArea.width > 10 && cropArea.height > 10 && onApplyCrop) {
+            onApplyCrop();
+          }
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          onCropChange({ active: false, x: 0, y: 0, width: 0, height: 0 });
+          setIsCropMode(false);
+          return;
+        }
+      }
 
       // Keyboard arrow nudge for selected point
       if (selectedPointIndex !== null && points[selectedPointIndex]) {
@@ -111,7 +143,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [selectedPointIndex, points, onPointsChange]);
+  }, [selectedPointIndex, points, onPointsChange, isCropMode, cropArea, onApplyCrop, onCropChange, setIsCropMode]);
 
   // Fit image to canvas view
   const fitToView = useCallback(() => {
@@ -222,7 +254,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
         return;
       }
 
-      // Check if clicking existing calibration point handle (threshold: 12px)
+      // Check if clicking existing calibration point handle (generous hit radius)
       if (hoveredPointIndex !== null) {
         setIsDraggingPoint(true);
         setSelectedPointIndex(hoveredPointIndex);
@@ -257,9 +289,11 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
           onPointsChange(updated);
           setSelectedPointIndex(updated.length - 1);
         } else {
-          // Both points already set; clicking moves Point 1 to start fresh
-          onPointsChange([finalPos]);
-          setSelectedPointIndex(0);
+          // Both points are already set!
+          // DO NOT wipe the points. Instead, allow the user to pan the canvas naturally by dragging.
+          setIsDragging(true);
+          setDragStart({ x: mouseX - panX, y: mouseY - panY });
+          return;
         }
       }
     }
@@ -314,12 +348,12 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       return;
     }
 
-    // Check hover near points (within 12 screen pixels)
+    // Check hover near points (within 22 screen pixels for effortless grabbing)
     let foundIndex: number | null = null;
     points.forEach((p, idx) => {
       const screenP = imageToScreen(p.x, p.y);
       const dist = Math.hypot(screenP.x - mouseX, screenP.y - mouseY);
-      if (dist <= 14) {
+      if (dist <= 22) {
         foundIndex = idx;
       }
     });
@@ -453,7 +487,26 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       ctx.restore();
     }
 
-    // 3. Calibration Points and Dimension Line
+    // 3. Live guideline preview when placing Point 2
+    if (points.length === 1 && mouseCanvasPos) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(59, 130, 246, 0.7)';
+      ctx.lineWidth = 2 / scale;
+      ctx.setLineDash([5 / scale, 5 / scale]);
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+      ctx.lineTo(mouseCanvasPos.x, mouseCanvasPos.y);
+      ctx.stroke();
+
+      // Floating live pixel counter at mouse position
+      const liveDist = Math.hypot(mouseCanvasPos.x - points[0].x, mouseCanvasPos.y - points[0].y);
+      ctx.font = `bold ${Math.max(10, 12 / scale)}px monospace`;
+      ctx.fillStyle = '#60a5fa';
+      ctx.fillText(`${liveDist.toFixed(0)} px`, mouseCanvasPos.x + 10 / scale, mouseCanvasPos.y - 10 / scale);
+      ctx.restore();
+    }
+
+    // 4. Calibration Points and Dimension Line
     if (points.length > 0) {
       ctx.save();
 
@@ -461,9 +514,10 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       if (points.length === 2) {
         const p1 = points[0];
         const p2 = points[1];
+        const isCalibrated = Boolean(knownFeetInput && calculation);
 
         // Glow shadow
-        ctx.strokeStyle = 'rgba(239, 68, 68, 0.3)';
+        ctx.strokeStyle = isCalibrated ? 'rgba(16, 185, 129, 0.3)' : 'rgba(59, 130, 246, 0.3)';
         ctx.lineWidth = 8 / scale;
         ctx.beginPath();
         ctx.moveTo(p1.x, p1.y);
@@ -471,7 +525,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
         ctx.stroke();
 
         // Solid dimension line
-        ctx.strokeStyle = '#ef4444';
+        ctx.strokeStyle = isCalibrated ? '#10b981' : '#3b82f6';
         ctx.lineWidth = 3 / scale;
         ctx.beginPath();
         ctx.moveTo(p1.x, p1.y);
@@ -484,16 +538,17 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
         const dx = p2.x - p1.x;
         const dy = p2.y - p1.y;
         const dist = Math.hypot(dx, dy);
-        const angleDeg = Math.round((Math.atan2(dy, dx) * 180) / Math.PI);
 
-        const badgeText = `${dist.toFixed(0)} px • ${knownFeetInput ? `${knownFeetInput} ft` : ''}`;
+        const badgeText = isCalibrated
+          ? `✓ ${calculation!.actualFeet.toFixed(1)} ft (${dist.toFixed(0)} px • ${calculation!.currentPixelsPerFoot.toFixed(1)} px/ft)`
+          : `📏 ${dist.toFixed(0)} px — Enter wall length in Step 2 ➜`;
 
-        ctx.font = `bold ${Math.max(12, 14 / scale)}px monospace`;
+        ctx.font = `bold ${Math.max(11, 13 / scale)}px monospace`;
         const metrics = ctx.measureText(badgeText);
-        const padX = 8 / scale;
-        const padY = 4 / scale;
+        const padX = 10 / scale;
+        const padY = 5 / scale;
 
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.95)';
         ctx.fillRect(
           midX - metrics.width / 2 - padX,
           midY - 12 / scale - padY,
@@ -501,7 +556,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
           24 / scale
         );
 
-        ctx.strokeStyle = '#ef4444';
+        ctx.strokeStyle = isCalibrated ? '#10b981' : '#3b82f6';
         ctx.lineWidth = 1.5 / scale;
         ctx.strokeRect(
           midX - metrics.width / 2 - padX,
@@ -510,7 +565,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
           24 / scale
         );
 
-        ctx.fillStyle = '#fef08a';
+        ctx.fillStyle = isCalibrated ? '#a7f3d0' : '#93c5fd';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(badgeText, midX, midY);
@@ -661,6 +716,12 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
+      onDoubleClick={() => {
+        // Double-click to apply crop when crop area is active
+        if (isCropMode && cropArea.active && cropArea.width > 10 && cropArea.height > 10 && onApplyCrop) {
+          onApplyCrop();
+        }
+      }}
       onContextMenu={(e) => e.preventDefault()}
       onDragOver={(e) => {
         e.preventDefault();
@@ -748,28 +809,187 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
         </div>
       )}
 
-      {/* Floating Instructions Pill */}
+      {/* Floating Guidance & Interactive Calibration Prompts */}
       {sourceImage && (
-        <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-slate-900/90 text-slate-200 border border-slate-700/80 px-4 py-1.5 rounded-full text-xs shadow-lg backdrop-blur-md pointer-events-none flex items-center gap-2">
-          {points.length === 0 && (
-            <>
-              <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
-              <span>Click <strong>Point 1</strong>: The start tick mark of any known wall (e.g. 48&apos;-0&quot;).</span>
-            </>
+        <>
+          {/* CROP MODE: Active Box Action Prompt */}
+          {isCropMode && cropArea.active && cropArea.width > 10 && cropArea.height > 10 && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-slate-900/95 border-2 border-amber-500 text-slate-100 px-5 py-3 rounded-2xl shadow-2xl backdrop-blur-md z-30 flex flex-col sm:flex-row items-center gap-4 animate-in fade-in zoom-in-95">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-xl bg-amber-600 text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-md">
+                  <CropIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-white flex items-center gap-2">
+                    <span>Selected: {Math.round(cropArea.width)} × {Math.round(cropArea.height)} px</span>
+                    <span className="text-[10px] uppercase font-bold text-amber-300 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-800">
+                      Crop Ready
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 mt-0.5">
+                    Click <strong>Apply Crop</strong>, press <kbd className="px-1.5 py-0.5 rounded bg-slate-800 text-amber-300 font-mono text-[10px] border border-slate-700">Enter</kbd>, or double-click to crop.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => onApplyCrop && onApplyCrop()}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white transition shadow-md shadow-amber-600/30 cursor-pointer"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Apply Crop</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onCropChange({ active: false, x: 0, y: 0, width: 0, height: 0 });
+                    setIsCropMode(false);
+                  }}
+                  className="inline-flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition cursor-pointer"
+                  title="Cancel crop selection (Esc)"
+                >
+                  <X className="w-4 h-4" />
+                  <span>Cancel</span>
+                </button>
+              </div>
+            </div>
           )}
-          {points.length === 1 && (
-            <>
-              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-              <span>Click <strong>Point 2</strong>: The end of that same wall. (Hold <strong>Shift</strong> for horizontal/vertical snap).</span>
-            </>
+
+          {/* CROP MODE: Drawing Prompt (when box not yet drawn) */}
+          {isCropMode && (!cropArea.active || cropArea.width <= 10 || cropArea.height <= 10) && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-amber-950/90 border border-amber-600/80 text-amber-200 px-4 py-2 rounded-full text-xs shadow-xl backdrop-blur-md z-30 flex items-center gap-2.5">
+              <CropIcon className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>
+                <strong>Crop Tool Active:</strong> Click and drag a box on the blueprint to isolate your floor plan area.
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsCropMode(false)}
+                className="ml-2 text-slate-400 hover:text-white p-0.5 rounded transition cursor-pointer"
+                title="Cancel crop mode (Esc)"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
           )}
-          {points.length === 2 && (
-            <>
-              <span className="w-2 h-2 rounded-full bg-emerald-400" />
-              <span>Points placed! Verify dimension length above, then click <strong>Calibrate & Export</strong>.</span>
-            </>
+
+          {/* STEP 1: Point Placement Prompt (only when not in crop mode) */}
+          {!isCropMode && points.length < 2 && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-slate-900/90 text-slate-200 border border-slate-700/80 px-4 py-2 rounded-full text-xs shadow-lg backdrop-blur-md pointer-events-none flex items-center gap-2.5 z-10">
+              {points.length === 0 && (
+                <>
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-pulse shrink-0" />
+                  <span>
+                    <strong className="text-white">Step 1:</strong> Click the <strong>start corner</strong> of any wall with a printed measurement.
+                  </span>
+                </>
+              )}
+              {points.length === 1 && (
+                <>
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
+                  <span>
+                    <strong className="text-white">Step 1:</strong> Now click the <strong>end corner</strong> of that wall. (Hold <strong>Shift</strong> to snap).
+                  </span>
+                </>
+              )}
+            </div>
           )}
-        </div>
+
+          {/* STEP 2: Wall Dimension Prompt (Appears immediately after 2 points placed, not in crop mode) */}
+          {!isCropMode && points.length === 2 && (!knownFeetInput || !calculation) && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-slate-900/95 border-2 border-blue-500 text-slate-100 px-5 py-3 rounded-2xl shadow-2xl backdrop-blur-md z-20 flex flex-col sm:flex-row items-center gap-3 animate-in fade-in zoom-in-95">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-md">
+                  2
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-white flex items-center gap-2">
+                    <span>Wall Measured: {Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y).toFixed(0)} px</span>
+                    <span className="text-[10px] uppercase font-bold text-blue-300 bg-blue-950 px-2 py-0.5 rounded border border-blue-800">
+                      Step 2: Enter Dimension
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 mt-0.5">
+                    Enter the length printed on your blueprint for this wall:
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={knownFeetInput}
+                  onChange={(e) => onKnownFeetChange(e.target.value)}
+                  placeholder="e.g. 24 or 30' 0&quot;"
+                  autoFocus
+                  className="w-28 sm:w-32 px-3 py-1.5 text-xs font-mono font-bold bg-slate-950 border-2 border-blue-400 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder:text-slate-500"
+                />
+                <span className="text-xs font-bold text-slate-300">ft</span>
+              </div>
+            </div>
+          )}
+
+          {/* CALIBRATED: Success Badge with quick tools */}
+          {points.length === 2 && knownFeetInput && calculation && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-slate-900/95 border border-emerald-500/80 text-emerald-100 px-4 py-2 rounded-2xl shadow-xl backdrop-blur-md z-20 flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span className="text-xs font-bold text-white">✓ Calibrated for Apex!</span>
+                <span className="text-xs text-emerald-300 font-mono">
+                  {calculation.actualFeet.toFixed(1)}&apos; = {calculation.measuredPixels.toFixed(0)} px ({calculation.currentPixelsPerFoot.toFixed(1)} px/ft)
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onToggleApexGrid}
+                  className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition cursor-pointer flex items-center gap-1.5 ${
+                    showApexGrid
+                      ? 'bg-cyan-900/60 text-cyan-200 border-cyan-500'
+                      : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700 hover:text-white'
+                  }`}
+                >
+                  <Grid className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>{showApexGrid ? 'Apex 10&apos; Grid: ON' : 'Verify with 10&apos; Grid'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onPointsChange([])}
+                  className="text-[11px] text-slate-400 hover:text-rose-400 transition cursor-pointer"
+                  title="Clear points and choose a different wall"
+                >
+                  Re-measure
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* APEX GRID VERIFICATION HELPER CARD */}
+          {showApexGrid && calculation && (
+            <div className="absolute top-16 right-4 bg-slate-900/95 border border-cyan-500/50 text-slate-200 p-3.5 rounded-xl shadow-2xl backdrop-blur-md max-w-xs z-10 pointer-events-auto">
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <div className="flex items-center gap-1.5 text-cyan-300 font-bold text-xs">
+                  <Grid className="w-4 h-4 text-cyan-400" />
+                  <span>Apex 10&apos; Grid Active</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={onToggleApexGrid}
+                  className="text-[10px] text-slate-400 hover:text-white px-1.5 py-0.5 rounded bg-slate-800 cursor-pointer"
+                >
+                  Hide
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                Each cyan grid square represents <strong className="text-cyan-300 font-semibold">10 × 10 feet</strong> in Apex Sketch.
+              </p>
+              <div className="mt-2 pt-2 border-t border-slate-800 text-[10px] text-slate-400">
+                💡 <strong className="text-slate-200">How to verify:</strong> Check other rooms on your blueprint (e.g. a 20-ft garage spans 2 squares, a 30-ft room spans 3).
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* On-Screen Canvas Navigation & Tool Controls */}
@@ -828,7 +1048,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
 
           <button
             type="button"
-            onClick={() => setShowApexGrid(!showApexGrid)}
+            onClick={onToggleApexGrid}
             disabled={!calculation}
             className={`p-1.5 rounded transition cursor-pointer ${
               showApexGrid
@@ -869,15 +1089,36 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
                 setIsCropMode(true);
               }
             }}
-            className={`p-1.5 rounded transition cursor-pointer ${
+            className={`p-1.5 rounded transition cursor-pointer relative ${
               isCropMode
                 ? 'bg-amber-600 text-white'
+                : hasCropApplied
+                ? 'text-amber-400 hover:text-amber-300 hover:bg-slate-800'
                 : 'text-slate-300 hover:text-white hover:bg-slate-800'
             }`}
-            title="Crop blueprint to isolate floor plan area"
+            title={
+              hasCropApplied
+                ? 'Crop tool (Currently cropped - click to crop further)'
+                : 'Crop blueprint to isolate floor plan area'
+            }
           >
             <CropIcon className="w-4 h-4" />
+            {hasCropApplied && !isCropMode && (
+              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400 ring-2 ring-slate-900" />
+            )}
           </button>
+
+          {/* Reset Crop to full original blueprint */}
+          {hasCropApplied && onResetCrop && (
+            <button
+              type="button"
+              onClick={onResetCrop}
+              className="p-1.5 rounded transition cursor-pointer text-slate-400 hover:text-rose-400 hover:bg-slate-800"
+              title="Reset to original uncropped blueprint"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 

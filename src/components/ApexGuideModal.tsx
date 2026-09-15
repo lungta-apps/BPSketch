@@ -77,28 +77,37 @@ export const ApexGuideModal: React.FC<ApexGuideModalProps> = ({ isOpen, onClose 
 
               <div className="bg-slate-800/50 border border-slate-700/60 p-3.5 rounded-xl flex flex-col gap-1.5">
                 <span className="text-blue-400 font-bold text-xs uppercase tracking-wider">
-                  Step 2 • Click Wall Ends
+                  Step 1 • Measure Wall on Canvas
                 </span>
                 <p className="text-slate-400 text-[11px]">
-                  Zoom in on any wall with a labeled dimension (e.g. 24&apos;-0&quot;). Click the start and end tick marks. Use the 5X loupe for exact precision.
+                  Zoom in on any wall with a known measurement (e.g. 24&apos;-0&quot;). Click the start and end corner marks. The app calculates the exact pixel span.
                 </p>
               </div>
 
               <div className="bg-slate-800/50 border border-slate-700/60 p-3.5 rounded-xl flex flex-col gap-1.5">
                 <span className="text-blue-400 font-bold text-xs uppercase tracking-wider">
-                  Step 3 • Calibrate &amp; Export
+                  Step 2 • Enter Known Wall Length
                 </span>
                 <p className="text-slate-400 text-[11px]">
-                  Type the dimension (e.g. &quot;24&quot; or &quot;24&apos; 6&quot;&quot;). The scaler recalculates the image to 9.6 px/ft and embeds the 96 DPI metadata.
+                  Type the printed length (e.g. &quot;24&quot; or &quot;32&apos; 6&quot;&quot;). This establishes the exact scale ratio (e.g., 24.5 px/ft → 9.60 px/ft).
                 </p>
               </div>
 
-              <div className="bg-slate-800/50 border border-slate-700/60 p-3.5 rounded-xl flex flex-col gap-1.5">
-                <span className="text-blue-400 font-bold text-xs uppercase tracking-wider">
-                  Step 4 • Trace in Apex v7
+              <div className="bg-slate-800/50 border border-cyan-700/60 p-3.5 rounded-xl flex flex-col gap-1.5">
+                <span className="text-cyan-400 font-bold text-xs uppercase tracking-wider">
+                  Visual Check • Apex 10&apos; Grid
                 </span>
                 <p className="text-slate-400 text-[11px]">
-                  Open Apex Sketch → import background image. Every wall will fall squarely on the 10-foot grid lines for rapid, effortless tracing!
+                  Toggle the Apex 10&apos; Grid to preview how the plan will match Apex Sketch. A 20-ft wall spans 2 grid boxes, a 30-ft room spans 3 grid boxes.
+                </p>
+              </div>
+
+              <div className="bg-slate-800/50 border border-emerald-700/60 p-3.5 rounded-xl flex flex-col gap-1.5">
+                <span className="text-emerald-400 font-bold text-xs uppercase tracking-wider">
+                  Export • Ready for Apex Sketch
+                </span>
+                <p className="text-slate-400 text-[11px]">
+                  Click Calibrate &amp; Export. Drop the generated image into Apex Sketch v7 as a background — it lines up with Apex&apos;s grid 1:1 without photometrics!
                 </p>
               </div>
             </div>

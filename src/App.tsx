@@ -12,6 +12,8 @@ import { renderPdfPage } from './utils/pdfRenderer';
 export default function App() {
   // Source Blueprint State
   const [sourceImage, setSourceImage] = useState<HTMLCanvasElement | HTMLImageElement | null>(null);
+  const [originalSourceImage, setOriginalSourceImage] = useState<HTMLCanvasElement | HTMLImageElement | null>(null);
+  const [hasCropApplied, setHasCropApplied] = useState<boolean>(false);
   const [fileName, setFileName] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [loadingMessage, setLoadingMessage] = useState<string>('');
@@ -45,7 +47,8 @@ export default function App() {
   // Modals & Panels
   const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
   const [isGuideModalOpen, setIsGuideModalOpen] = useState<boolean>(false);
-  const [isAdjustmentsOpen, setIsAdjustmentsOpen] = useState<boolean>(true);
+  const [isAdjustmentsOpen, setIsAdjustmentsOpen] = useState<boolean>(false);
+  const [showApexGrid, setShowApexGrid] = useState<boolean>(false);
 
   // Compute live calibration telemetry
   const calculation = useMemo<CalibrationCalculation | null>(() => {
@@ -102,6 +105,8 @@ export default function App() {
 
         const rendered = await renderPdfPage(buffer, 1, 2.0);
         setSourceImage(rendered.canvas);
+        setOriginalSourceImage(rendered.canvas);
+        setHasCropApplied(false);
         setPdfInfo({
           pageNumber: rendered.pageNumber,
           numPages: rendered.totalPdfPages,
@@ -120,6 +125,8 @@ export default function App() {
           img.onerror = reject;
         });
         setSourceImage(img);
+        setOriginalSourceImage(img);
+        setHasCropApplied(false);
       }
     } catch (err) {
       console.error('Failed to load file:', err);
@@ -137,11 +144,15 @@ export default function App() {
     try {
       const rendered = await renderPdfPage(pdfData, newPage, pdfInfo.renderScale);
       setSourceImage(rendered.canvas);
+      setOriginalSourceImage(rendered.canvas);
+      setHasCropApplied(false);
       setPdfInfo({
         ...pdfInfo,
         pageNumber: rendered.pageNumber,
       });
       setPoints([]);
+      setCropArea({ active: false, x: 0, y: 0, width: 0, height: 0 });
+      setIsCropMode(false);
     } catch (err) {
       console.error('Error changing PDF page:', err);
     } finally {
@@ -157,17 +168,92 @@ export default function App() {
     try {
       const rendered = await renderPdfPage(pdfData, pdfInfo.pageNumber, newScale);
       setSourceImage(rendered.canvas);
+      setOriginalSourceImage(rendered.canvas);
+      setHasCropApplied(false);
       setPdfInfo({
         ...pdfInfo,
         renderScale: newScale,
       });
       setPoints([]);
+      setCropArea({ active: false, x: 0, y: 0, width: 0, height: 0 });
+      setIsCropMode(false);
     } catch (err) {
       console.error('Error changing render scale:', err);
     } finally {
       setIsLoading(false);
     }
   };
+
+  // Apply Crop Action: cuts sourceImage to cropArea, shifts calibration points accordingly
+  const handleApplyCrop = useCallback(() => {
+    if (!sourceImage) return;
+    if (!cropArea.active || cropArea.width < 10 || cropArea.height < 10) {
+      setIsCropMode(false);
+      return;
+    }
+
+    const { x, y, width, height } = cropArea;
+
+    // Ensure x, y, width, height stay strictly within source bounds
+    const safeX = Math.max(0, Math.min(x, sourceImage.width - 1));
+    const safeY = Math.max(0, Math.min(y, sourceImage.height - 1));
+    const safeW = Math.min(width, sourceImage.width - safeX);
+    const safeH = Math.min(height, sourceImage.height - safeY);
+
+    if (safeW < 5 || safeH < 5) return;
+
+    // Create cropped canvas
+    const croppedCanvas = document.createElement('canvas');
+    croppedCanvas.width = Math.round(safeW);
+    croppedCanvas.height = Math.round(safeH);
+    const ctx = croppedCanvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.drawImage(
+      sourceImage,
+      Math.round(safeX),
+      Math.round(safeY),
+      Math.round(safeW),
+      Math.round(safeH),
+      0,
+      0,
+      Math.round(safeW),
+      Math.round(safeH)
+    );
+
+    // If there were existing calibration points, transform or retain them if inside crop
+    if (points.length > 0) {
+      const shifted = points.map((p) => ({
+        x: p.x - safeX,
+        y: p.y - safeY,
+      }));
+      // Keep points if they are reasonably within or near cropped boundary
+      const allInside = shifted.every(
+        (p) => p.x >= -20 && p.y >= -20 && p.x <= safeW + 20 && p.y <= safeH + 20
+      );
+      if (allInside) {
+        setPoints(shifted);
+      } else {
+        setPoints([]);
+      }
+    }
+
+    setSourceImage(croppedCanvas);
+    setHasCropApplied(true);
+    setCropArea({ active: false, x: 0, y: 0, width: 0, height: 0 });
+    setIsCropMode(false);
+  }, [sourceImage, cropArea, points]);
+
+  // Reset Crop Action: restore full original image
+  const handleResetCrop = useCallback(() => {
+    if (!originalSourceImage) return;
+    setSourceImage(originalSourceImage);
+    setHasCropApplied(false);
+    setCropArea({ active: false, x: 0, y: 0, width: 0, height: 0 });
+    setIsCropMode(false);
+    // Note: points measured on cropped view won't match full image coords, so reset points
+    setPoints([]);
+  }, [originalSourceImage]);
 
   // Global Clipboard paste support (Win+Shift+S snipping tool support)
   useEffect(() => {
@@ -229,6 +315,9 @@ export default function App() {
         onTriggerCalibration={() => setIsExportModalOpen(true)}
         calculation={calculation}
         hasImage={Boolean(sourceImage)}
+        showApexGrid={showApexGrid}
+        onToggleApexGrid={() => setShowApexGrid((v) => !v)}
+        onOpenGuide={() => setIsGuideModalOpen(true)}
       />
 
       {/* Main Workspace: Canvas + Adjustments Sidebar */}
@@ -244,7 +333,13 @@ export default function App() {
           onCropChange={setCropArea}
           isCropMode={isCropMode}
           setIsCropMode={setIsCropMode}
+          onApplyCrop={handleApplyCrop}
+          onResetCrop={handleResetCrop}
+          hasCropApplied={hasCropApplied}
           knownFeetInput={knownFeetInput}
+          onKnownFeetChange={setKnownFeetInput}
+          showApexGrid={showApexGrid}
+          onToggleApexGrid={() => setShowApexGrid((v) => !v)}
           onFileSelect={handleFileSelect}
         />
 
