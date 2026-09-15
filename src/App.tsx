@@ -193,12 +193,14 @@ export default function App() {
     }
 
     const { x, y, width, height } = cropArea;
+    const imgW = ('naturalWidth' in sourceImage ? (sourceImage as HTMLImageElement).naturalWidth : 0) || sourceImage.width;
+    const imgH = ('naturalHeight' in sourceImage ? (sourceImage as HTMLImageElement).naturalHeight : 0) || sourceImage.height;
 
     // Ensure x, y, width, height stay strictly within source bounds
-    const safeX = Math.max(0, Math.min(x, sourceImage.width - 1));
-    const safeY = Math.max(0, Math.min(y, sourceImage.height - 1));
-    const safeW = Math.min(width, sourceImage.width - safeX);
-    const safeH = Math.min(height, sourceImage.height - safeY);
+    const safeX = Math.max(0, Math.min(x, imgW - 1));
+    const safeY = Math.max(0, Math.min(y, imgH - 1));
+    const safeW = Math.max(1, Math.min(width, imgW - safeX));
+    const safeH = Math.max(1, Math.min(height, imgH - safeY));
 
     if (safeW < 5 || safeH < 5) return;
 
@@ -208,6 +210,9 @@ export default function App() {
     croppedCanvas.height = Math.round(safeH);
     const ctx = croppedCanvas.getContext('2d');
     if (!ctx) return;
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
 
     ctx.drawImage(
       sourceImage,
@@ -227,9 +232,9 @@ export default function App() {
         x: p.x - safeX,
         y: p.y - safeY,
       }));
-      // Keep points if they are reasonably within or near cropped boundary
+      // Keep points if they are strictly within cropped boundary
       const allInside = shifted.every(
-        (p) => p.x >= -20 && p.y >= -20 && p.x <= safeW + 20 && p.y <= safeH + 20
+        (p) => p.x >= 0 && p.y >= 0 && p.x <= safeW && p.y <= safeH
       );
       if (allInside) {
         setPoints(shifted);

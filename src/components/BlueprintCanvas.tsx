@@ -227,7 +227,10 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
 
   // Mouse Down
   const handleMouseDown = (e: React.MouseEvent) => {
+    // Only handle mouse events originating directly on the canvas element (prevents overlay buttons/prompts from triggering drag/crop reset)
+    if (e.target !== canvasRef.current) return;
     if (!containerRef.current) return;
+
     const rect = containerRef.current.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
@@ -243,11 +246,18 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     if (e.button === 0) {
       // Crop mode selection
       if (isCropMode) {
-        setCropDragStart(imgPos);
+        if (!sourceImage) return;
+        const imgW = ('naturalWidth' in sourceImage ? (sourceImage as HTMLImageElement).naturalWidth : 0) || sourceImage.width;
+        const imgH = ('naturalHeight' in sourceImage ? (sourceImage as HTMLImageElement).naturalHeight : 0) || sourceImage.height;
+        const clampedPos = {
+          x: Math.max(0, Math.min(imgW, imgPos.x)),
+          y: Math.max(0, Math.min(imgH, imgPos.y)),
+        };
+        setCropDragStart(clampedPos);
         onCropChange({
           active: true,
-          x: imgPos.x,
-          y: imgPos.y,
+          x: Math.round(clampedPos.x),
+          y: Math.round(clampedPos.y),
           width: 0,
           height: 0,
         });
@@ -316,17 +326,26 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     }
 
     // Crop drag update
-    if (isCropMode && cropDragStart) {
-      const minX = Math.min(cropDragStart.x, imgPos.x);
-      const minY = Math.min(cropDragStart.y, imgPos.y);
-      const width = Math.abs(imgPos.x - cropDragStart.x);
-      const height = Math.abs(imgPos.y - cropDragStart.y);
+    if (isCropMode && cropDragStart && sourceImage) {
+      const imgW = ('naturalWidth' in sourceImage ? (sourceImage as HTMLImageElement).naturalWidth : 0) || sourceImage.width;
+      const imgH = ('naturalHeight' in sourceImage ? (sourceImage as HTMLImageElement).naturalHeight : 0) || sourceImage.height;
+
+      const curX = Math.max(0, Math.min(imgW, imgPos.x));
+      const curY = Math.max(0, Math.min(imgH, imgPos.y));
+      const startX = Math.max(0, Math.min(imgW, cropDragStart.x));
+      const startY = Math.max(0, Math.min(imgH, cropDragStart.y));
+
+      const minX = Math.min(startX, curX);
+      const minY = Math.min(startY, curY);
+      const width = Math.abs(curX - startX);
+      const height = Math.abs(curY - startY);
+
       onCropChange({
         active: true,
-        x: Math.max(0, minX),
-        y: Math.max(0, minY),
-        width,
-        height,
+        x: Math.round(minX),
+        y: Math.round(minY),
+        width: Math.round(width),
+        height: Math.round(height),
       });
       return;
     }
@@ -814,7 +833,12 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
         <>
           {/* CROP MODE: Active Box Action Prompt */}
           {isCropMode && cropArea.active && cropArea.width > 10 && cropArea.height > 10 && (
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-slate-900/95 border-2 border-amber-500 text-slate-100 px-5 py-3 rounded-2xl shadow-2xl backdrop-blur-md z-30 flex flex-col sm:flex-row items-center gap-4 animate-in fade-in zoom-in-95">
+            <div
+              onMouseDown={(e) => e.stopPropagation()}
+              onMouseUp={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+              className="absolute top-3 left-1/2 -translate-x-1/2 bg-slate-900/95 border-2 border-amber-500 text-slate-100 px-5 py-3 rounded-2xl shadow-2xl backdrop-blur-md z-30 flex flex-col sm:flex-row items-center gap-4 animate-in fade-in zoom-in-95"
+            >
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-xl bg-amber-600 text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-md">
                   <CropIcon className="w-4 h-4" />
@@ -835,15 +859,31 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => onApplyCrop && onApplyCrop()}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white transition shadow-md shadow-amber-600/30 cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onApplyCrop) onApplyCrop();
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white transition shadow-md shadow-amber-600/30 cursor-pointer active:scale-95"
                 >
                   <Check className="w-4 h-4" />
                   <span>Apply Crop</span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCropChange({ active: false, x: 0, y: 0, width: 0, height: 0 });
+                  }}
+                  className="inline-flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition cursor-pointer"
+                  title="Clear crop box to redraw"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Redraw</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
                     onCropChange({ active: false, x: 0, y: 0, width: 0, height: 0 });
                     setIsCropMode(false);
                   }}
@@ -859,7 +899,12 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
 
           {/* CROP MODE: Drawing Prompt (when box not yet drawn) */}
           {isCropMode && (!cropArea.active || cropArea.width <= 10 || cropArea.height <= 10) && (
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-amber-950/90 border border-amber-600/80 text-amber-200 px-4 py-2 rounded-full text-xs shadow-xl backdrop-blur-md z-30 flex items-center gap-2.5">
+            <div
+              onMouseDown={(e) => e.stopPropagation()}
+              onMouseUp={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+              className="absolute top-3 left-1/2 -translate-x-1/2 bg-amber-950/90 border border-amber-600/80 text-amber-200 px-4 py-2 rounded-full text-xs shadow-xl backdrop-blur-md z-30 flex items-center gap-2.5"
+            >
               <CropIcon className="w-4 h-4 text-amber-400 shrink-0" />
               <span>
                 <strong>Crop Tool Active:</strong> Click and drag a box on the blueprint to isolate your floor plan area.
@@ -872,6 +917,29 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
               >
                 <X className="w-3.5 h-3.5" />
               </button>
+            </div>
+          )}
+
+          {/* CROPPED BLUEPRINT STATUS BADGE */}
+          {hasCropApplied && !isCropMode && (
+            <div
+              onMouseDown={(e) => e.stopPropagation()}
+              className="absolute top-3 left-4 bg-slate-900/95 border border-amber-500/70 text-amber-200 px-3 py-1.5 rounded-xl text-xs shadow-xl backdrop-blur-md z-10 flex items-center gap-2"
+            >
+              <CropIcon className="w-3.5 h-3.5 text-amber-400" />
+              <span className="font-semibold text-slate-100">
+                Cropped: {sourceImage.width} × {sourceImage.height} px
+              </span>
+              {onResetCrop && (
+                <button
+                  type="button"
+                  onClick={onResetCrop}
+                  className="ml-1 text-[11px] font-medium text-amber-400 hover:text-amber-200 underline cursor-pointer"
+                  title="Restore uncropped blueprint"
+                >
+                  Reset Full
+                </button>
+              )}
             </div>
           )}
 
@@ -899,7 +967,12 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
 
           {/* STEP 2: Wall Dimension Prompt (Appears immediately after 2 points placed, not in crop mode) */}
           {!isCropMode && points.length === 2 && (!knownFeetInput || !calculation) && (
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-slate-900/95 border-2 border-blue-500 text-slate-100 px-5 py-3 rounded-2xl shadow-2xl backdrop-blur-md z-20 flex flex-col sm:flex-row items-center gap-3 animate-in fade-in zoom-in-95">
+            <div
+              onMouseDown={(e) => e.stopPropagation()}
+              onMouseUp={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+              className="absolute top-3 left-1/2 -translate-x-1/2 bg-slate-900/95 border-2 border-blue-500 text-slate-100 px-5 py-3 rounded-2xl shadow-2xl backdrop-blur-md z-20 flex flex-col sm:flex-row items-center gap-3 animate-in fade-in zoom-in-95"
+            >
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-md">
                   2
@@ -932,7 +1005,12 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
 
           {/* CALIBRATED: Success Badge with quick tools */}
           {points.length === 2 && knownFeetInput && calculation && (
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-slate-900/95 border border-emerald-500/80 text-emerald-100 px-4 py-2 rounded-2xl shadow-xl backdrop-blur-md z-20 flex flex-wrap items-center gap-3">
+            <div
+              onMouseDown={(e) => e.stopPropagation()}
+              onMouseUp={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+              className="absolute top-3 left-1/2 -translate-x-1/2 bg-slate-900/95 border border-emerald-500/80 text-emerald-100 px-4 py-2 rounded-2xl shadow-xl backdrop-blur-md z-20 flex flex-wrap items-center gap-3"
+            >
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                 <span className="text-xs font-bold text-white">✓ Calibrated for Apex!</span>
@@ -967,7 +1045,12 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
 
           {/* APEX GRID VERIFICATION HELPER CARD */}
           {showApexGrid && calculation && (
-            <div className="absolute top-16 right-4 bg-slate-900/95 border border-cyan-500/50 text-slate-200 p-3.5 rounded-xl shadow-2xl backdrop-blur-md max-w-xs z-10 pointer-events-auto">
+            <div
+              onMouseDown={(e) => e.stopPropagation()}
+              onMouseUp={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+              className="absolute top-16 right-4 bg-slate-900/95 border border-cyan-500/50 text-slate-200 p-3.5 rounded-xl shadow-2xl backdrop-blur-md max-w-xs z-10 pointer-events-auto"
+            >
               <div className="flex items-center justify-between gap-2 mb-1">
                 <div className="flex items-center gap-1.5 text-cyan-300 font-bold text-xs">
                   <Grid className="w-4 h-4 text-cyan-400" />
@@ -993,7 +1076,12 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       )}
 
       {/* On-Screen Canvas Navigation & Tool Controls */}
-      <div className="absolute bottom-4 left-4 flex flex-col gap-2 z-10">
+      <div
+        onMouseDown={(e) => e.stopPropagation()}
+        onMouseUp={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+        className="absolute bottom-4 left-4 flex flex-col gap-2 z-10"
+      >
         {/* Zoom & View Controls */}
         <div className="flex items-center gap-1 bg-slate-900/90 border border-slate-800 p-1 rounded-lg shadow-lg backdrop-blur-md">
           <button
