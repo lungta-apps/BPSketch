@@ -69,7 +69,7 @@ export const CalibrationToolbar: React.FC<CalibrationToolbarProps> = ({
               1
             </div>
 
-            <div className="flex flex-col min-w-[170px]">
+            <div className="flex flex-col min-w-[190px]">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
                   Step 1: Click Wall on Plan

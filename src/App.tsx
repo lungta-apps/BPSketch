@@ -260,6 +260,36 @@ export default function App() {
     setPoints([]);
   }, [originalSourceImage]);
 
+  // Physical Bitmap Rotation Action (preserves 1:1 coordinate integrity across all tools)
+  const handleRotateImage = useCallback(
+    (degrees: number) => {
+      if (!sourceImage) return;
+      const imgW = ('naturalWidth' in sourceImage ? (sourceImage as HTMLImageElement).naturalWidth : 0) || sourceImage.width;
+      const imgH = ('naturalHeight' in sourceImage ? (sourceImage as HTMLImageElement).naturalHeight : 0) || sourceImage.height;
+      const isQuarter = Math.abs(degrees) === 90 || Math.abs(degrees) === 270;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = isQuarter ? imgH : imgW;
+      canvas.height = isQuarter ? imgW : imgH;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate((degrees * Math.PI) / 180);
+      ctx.drawImage(sourceImage, -imgW / 2, -imgH / 2);
+
+      setSourceImage(canvas);
+      // Reset rotation state since the bitmap is now physically in the desired orientation
+      setAdjustments((prev) => ({ ...prev, rotation: 0 }));
+      setPoints([]);
+      setCropArea({ active: false, x: 0, y: 0, width: 0, height: 0 });
+      setIsCropMode(false);
+    },
+    [sourceImage]
+  );
+
   // Global Clipboard paste support (Win+Shift+S snipping tool support)
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
@@ -352,6 +382,7 @@ export default function App() {
         <AdjustmentsPanel
           adjustments={adjustments}
           onAdjustmentsChange={setAdjustments}
+          onRotateImage={handleRotateImage}
           pdfInfo={pdfInfo}
           onPageChange={handlePdfPageChange}
           onRenderScaleChange={handlePdfRenderScaleChange}

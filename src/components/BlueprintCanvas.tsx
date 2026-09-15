@@ -85,6 +85,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
   const [isDraggingPoint, setIsDraggingPoint] = useState(false);
   const [mouseCanvasPos, setMouseCanvasPos] = useState<Point2D | null>(null);
   const [isShiftPressed, setIsShiftPressed] = useState(false);
+  const [resizeCount, setResizeCount] = useState(0);
 
   // Crop drag state
   const [cropDragStart, setCropDragStart] = useState<Point2D | null>(null);
@@ -137,11 +138,17 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       if (e.key === 'Shift') setIsShiftPressed(false);
     };
 
+    const handleBlur = () => {
+      setIsShiftPressed(false);
+    };
+
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', handleBlur);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', handleBlur);
     };
   }, [selectedPointIndex, points, onPointsChange, isCropMode, cropArea, onApplyCrop, onCropChange, setIsCropMode]);
 
@@ -153,8 +160,13 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     const ch = container.clientHeight;
     if (cw === 0 || ch === 0) return;
 
-    const imgW = sourceImage.width;
-    const imgH = sourceImage.height;
+    if (canvasRef.current) {
+      canvasRef.current.width = cw;
+      canvasRef.current.height = ch;
+    }
+
+    const imgW = ('naturalWidth' in sourceImage ? (sourceImage as HTMLImageElement).naturalWidth : 0) || sourceImage.width;
+    const imgH = ('naturalHeight' in sourceImage ? (sourceImage as HTMLImageElement).naturalHeight : 0) || sourceImage.height;
 
     const fitScale = Math.min((cw - 60) / imgW, (ch - 60) / imgH, 1.0);
     setScale(fitScale);
@@ -169,30 +181,63 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     }
   }, [sourceImage, fitToView]);
 
-  // Resize canvas when container size changes
+  // Continuously synchronize canvas buffer dimensions with container via ResizeObserver
   useEffect(() => {
-    const handleResize = () => {
-      if (!canvasRef.current || !containerRef.current) return;
-      canvasRef.current.width = containerRef.current.clientWidth;
-      canvasRef.current.height = containerRef.current.clientHeight;
+    const container = containerRef.current;
+    if (!container) return;
+
+    const syncCanvasSize = () => {
+      const canvas = canvasRef.current;
+      if (!canvas || !container) return;
+      const rect = container.getBoundingClientRect();
+      const w = Math.round(rect.width);
+      const h = Math.round(rect.height);
+
+      if (w > 0 && h > 0 && (canvas.width !== w || canvas.height !== h)) {
+        canvas.width = w;
+        canvas.height = h;
+        setResizeCount((c) => c + 1);
+      }
     };
 
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    syncCanvasSize();
+
+    const ro = new ResizeObserver(() => {
+      syncCanvasSize();
+    });
+    ro.observe(container);
+
+    window.addEventListener('resize', syncCanvasSize);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', syncCanvasSize);
+    };
   }, []);
 
-  // Convert screen coordinates to source image coordinates
+  // Accurately map client viewport coordinates to canvas internal bitmap pixel coordinates
+  const getCanvasCoords = useCallback((e: React.MouseEvent | MouseEvent): { canvasX: number; canvasY: number } | null => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return null;
+
+    // Convert clientX / clientY (CSS pixels) to exact canvas buffer coordinates
+    const canvasX = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const canvasY = (e.clientY - rect.top) * (canvas.height / rect.height);
+    return { canvasX, canvasY };
+  }, []);
+
+  // Convert canvas buffer coordinates to source image coordinates
   const screenToImage = useCallback(
-    (screenX: number, screenY: number): Point2D => {
-      const imgX = (screenX - panX) / scale;
-      const imgY = (screenY - panY) / scale;
+    (canvasX: number, canvasY: number): Point2D => {
+      const imgX = (canvasX - panX) / scale;
+      const imgY = (canvasY - panY) / scale;
       return { x: imgX, y: imgY };
     },
     [panX, panY, scale]
   );
 
-  // Convert source image coordinates to screen coordinates
+  // Convert source image coordinates to canvas buffer coordinates
   const imageToScreen = useCallback(
     (imgX: number, imgY: number): Point2D => {
       return {
@@ -206,11 +251,13 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
   // Wheel zoom handler centered on mouse cursor
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
-    if (!sourceImage || !containerRef.current) return;
+    if (!sourceImage) return;
 
-    const rect = containerRef.current.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
+    const coords = getCanvasCoords(e);
+    if (!coords) return;
+
+    const mouseX = coords.canvasX;
+    const mouseY = coords.canvasY;
 
     const zoomFactor = 1.15;
     const newScale = e.deltaY < 0 ? scale * zoomFactor : scale / zoomFactor;
@@ -229,11 +276,14 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
   const handleMouseDown = (e: React.MouseEvent) => {
     // Only handle mouse events originating directly on the canvas element (prevents overlay buttons/prompts from triggering drag/crop reset)
     if (e.target !== canvasRef.current) return;
-    if (!containerRef.current) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
 
-    const rect = containerRef.current.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
+    const coords = getCanvasCoords(e);
+    if (!coords) return;
+
+    const mouseX = coords.canvasX;
+    const mouseY = coords.canvasY;
     const imgPos = screenToImage(mouseX, mouseY);
 
     // Pan with Right Click (button 2), Middle Click (button 1), Space+Left, or Pan Tool
@@ -273,17 +323,21 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
 
       // Calibration Point Placement
       if (!sourceImage) return;
+      const imgW = ('naturalWidth' in sourceImage ? (sourceImage as HTMLImageElement).naturalWidth : 0) || sourceImage.width;
+      const imgH = ('naturalHeight' in sourceImage ? (sourceImage as HTMLImageElement).naturalHeight : 0) || sourceImage.height;
+
       // Ensure click is within image bounds
       if (
         imgPos.x >= 0 &&
         imgPos.y >= 0 &&
-        imgPos.x <= sourceImage.width &&
-        imgPos.y <= sourceImage.height
+        imgPos.x <= imgW &&
+        imgPos.y <= imgH
       ) {
         let finalPos = { ...imgPos };
 
-        // If placing point 2 and Shift is pressed, snap orthogonal
-        if (points.length === 1 && isShiftPressed) {
+        // If placing point 2 and Shift is held (via event or tracked state), snap orthogonal
+        const isShift = e.shiftKey || isShiftPressed;
+        if (points.length === 1 && isShift) {
           const p1 = points[0];
           const dx = Math.abs(finalPos.x - p1.x);
           const dy = Math.abs(finalPos.y - p1.y);
@@ -311,10 +365,16 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
 
   // Mouse Move
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (!containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
+    const coords = getCanvasCoords(e);
+    if (!coords) return;
+
+    // Track shift state directly from event
+    if (e.shiftKey !== isShiftPressed) {
+      setIsShiftPressed(e.shiftKey);
+    }
+
+    const mouseX = coords.canvasX;
+    const mouseY = coords.canvasY;
     const imgPos = screenToImage(mouseX, mouseY);
     setMouseCanvasPos(imgPos);
 
@@ -353,7 +413,8 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     // Drag existing point handle
     if (isDraggingPoint && selectedPointIndex !== null) {
       let finalPos = { ...imgPos };
-      if (isShiftPressed && points.length === 2) {
+      const isShift = e.shiftKey || isShiftPressed;
+      if (isShift && points.length === 2) {
         const otherIndex = selectedPointIndex === 0 ? 1 : 0;
         const otherP = points[otherIndex];
         const dx = Math.abs(finalPos.x - otherP.x);
@@ -367,7 +428,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
       return;
     }
 
-    // Check hover near points (within 22 screen pixels for effortless grabbing)
+    // Check hover near points (within 22 canvas pixels for effortless grabbing)
     let foundIndex: number | null = null;
     points.forEach((p, idx) => {
       const screenP = imageToScreen(p.x, p.y);
@@ -508,20 +569,32 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
 
     // 3. Live guideline preview when placing Point 2
     if (points.length === 1 && mouseCanvasPos) {
+      let targetX = mouseCanvasPos.x;
+      let targetY = mouseCanvasPos.y;
+
+      // Snapping guideline preview if Shift is held
+      if (isShiftPressed) {
+        const p1 = points[0];
+        const dx = Math.abs(targetX - p1.x);
+        const dy = Math.abs(targetY - p1.y);
+        if (dx > dy) targetY = p1.y;
+        else targetX = p1.x;
+      }
+
       ctx.save();
       ctx.strokeStyle = 'rgba(59, 130, 246, 0.7)';
       ctx.lineWidth = 2 / scale;
       ctx.setLineDash([5 / scale, 5 / scale]);
       ctx.beginPath();
       ctx.moveTo(points[0].x, points[0].y);
-      ctx.lineTo(mouseCanvasPos.x, mouseCanvasPos.y);
+      ctx.lineTo(targetX, targetY);
       ctx.stroke();
 
       // Floating live pixel counter at mouse position
-      const liveDist = Math.hypot(mouseCanvasPos.x - points[0].x, mouseCanvasPos.y - points[0].y);
+      const liveDist = Math.hypot(targetX - points[0].x, targetY - points[0].y);
       ctx.font = `bold ${Math.max(10, 12 / scale)}px monospace`;
       ctx.fillStyle = '#60a5fa';
-      ctx.fillText(`${liveDist.toFixed(0)} px`, mouseCanvasPos.x + 10 / scale, mouseCanvasPos.y - 10 / scale);
+      ctx.fillText(`${liveDist.toFixed(0)} px`, targetX + 10 / scale, targetY - 10 / scale);
       ctx.restore();
     }
 
@@ -645,6 +718,9 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     selectedPointIndex,
     hoveredPointIndex,
     knownFeetInput,
+    isShiftPressed,
+    mouseCanvasPos,
+    resizeCount,
   ]);
 
   // Render Loupe Magnifier
@@ -661,18 +737,18 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
 
     lCtx.clearRect(0, 0, lw, lh);
 
-    // Draw source image crop inside loupe
-    lCtx.imageSmoothingEnabled = false; // pixelated for precision inspection
-
-    const srcW = lw / zoom;
-    const srcH = lh / zoom;
-    const srcX = mouseCanvasPos.x - srcW / 2;
-    const srcY = mouseCanvasPos.y - srcH / 2;
+    // Pixelated for precision subpixel inspection
+    lCtx.imageSmoothingEnabled = false;
 
     lCtx.fillStyle = '#0f172a';
     lCtx.fillRect(0, 0, lw, lh);
 
     lCtx.save();
+    // Center loupe view exactly on mouseCanvasPos with magnification
+    lCtx.translate(lw / 2, lh / 2);
+    lCtx.scale(zoom, zoom);
+    lCtx.translate(-mouseCanvasPos.x, -mouseCanvasPos.y);
+
     // Apply filters if any
     const filters: string[] = [];
     if (adjustments.contrast !== 100) filters.push(`contrast(${adjustments.contrast}%)`);
@@ -681,7 +757,7 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
     if (adjustments.grayscale) filters.push('grayscale(100%)');
     lCtx.filter = filters.length > 0 ? filters.join(' ') : 'none';
 
-    lCtx.drawImage(sourceImage, srcX, srcY, srcW, srcH, 0, 0, lw, lh);
+    lCtx.drawImage(sourceImage, 0, 0);
     lCtx.restore();
 
     // Crosshair in loupe center

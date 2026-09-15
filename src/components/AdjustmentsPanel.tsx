@@ -15,6 +15,7 @@ import {
 interface AdjustmentsPanelProps {
   adjustments: BlueprintAdjustments;
   onAdjustmentsChange: (adj: BlueprintAdjustments) => void;
+  onRotateImage?: (degrees: number) => void;
   pdfInfo: PdfPageInfo | null;
   onPageChange: (page: number) => void;
   onRenderScaleChange: (scale: number) => void;
@@ -25,6 +26,7 @@ interface AdjustmentsPanelProps {
 export const AdjustmentsPanel: React.FC<AdjustmentsPanelProps> = ({
   adjustments,
   onAdjustmentsChange,
+  onRotateImage,
   pdfInfo,
   onPageChange,
   onRenderScaleChange,
@@ -32,17 +34,25 @@ export const AdjustmentsPanel: React.FC<AdjustmentsPanelProps> = ({
   onToggle,
 }) => {
   const rotateCw = () => {
-    onAdjustmentsChange({
-      ...adjustments,
-      rotation: (adjustments.rotation + 90) % 360,
-    });
+    if (onRotateImage) {
+      onRotateImage(90);
+    } else {
+      onAdjustmentsChange({
+        ...adjustments,
+        rotation: (adjustments.rotation + 90) % 360,
+      });
+    }
   };
 
   const rotateCcw = () => {
-    onAdjustmentsChange({
-      ...adjustments,
-      rotation: (adjustments.rotation + 270) % 360,
-    });
+    if (onRotateImage) {
+      onRotateImage(-90);
+    } else {
+      onAdjustmentsChange({
+        ...adjustments,
+        rotation: (adjustments.rotation + 270) % 360,
+      });
+    }
   };
 
   const resetAdjustments = () => {
