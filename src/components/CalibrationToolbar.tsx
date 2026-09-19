@@ -65,7 +65,7 @@ export const CalibrationToolbar: React.FC<CalibrationToolbarProps> = ({
             {hasImage && points.length === 0 && (
               <div
                 id="step-1-purple-glow"
-                className="absolute -inset-0.5 rounded-2xl bg-gradient-to-r from-purple-600/70 via-fuchsia-500/60 to-indigo-600/70 opacity-45 blur-md pointer-events-none transition-opacity duration-500"
+                className="purple-halo-bg transition-opacity duration-500"
                 aria-hidden="true"
               />
             )}
@@ -78,7 +78,7 @@ export const CalibrationToolbar: React.FC<CalibrationToolbarProps> = ({
                   : points.length === 1
                   ? 'bg-amber-950/40 border-amber-500/50 text-amber-200'
                   : hasImage
-                  ? 'bg-slate-900/95 border-purple-500/45 text-purple-100 shadow-[0_0_15px_rgba(168,85,247,0.22)] ring-1 ring-purple-500/25'
+                  ? 'purple-glow-card text-purple-100'
                   : 'bg-slate-800/90 border-slate-700 text-slate-400 opacity-60'
               }`}
             >
@@ -89,7 +89,7 @@ export const CalibrationToolbar: React.FC<CalibrationToolbarProps> = ({
                     : points.length === 1
                     ? 'bg-amber-500 text-slate-950 shadow-[0_0_10px_rgba(245,158,11,0.5)]'
                     : hasImage
-                    ? 'bg-gradient-to-br from-purple-500 to-indigo-600 text-white shadow-[0_0_8px_rgba(168,85,247,0.4)]'
+                    ? 'purple-badge-circle'
                     : 'bg-slate-700 text-slate-400'
                 }`}
               >
@@ -100,7 +100,7 @@ export const CalibrationToolbar: React.FC<CalibrationToolbarProps> = ({
                 <div className="flex items-center justify-between gap-2">
                   <span
                     className={`text-[10px] uppercase font-bold tracking-wider transition-colors ${
-                      hasImage && points.length === 0 ? 'text-purple-300/90' : 'text-slate-400'
+                      hasImage && points.length === 0 ? 'text-purple-200' : 'text-slate-400'
                     }`}
                   >
                     Step 1: Click Wall on Plan
@@ -128,8 +128,8 @@ export const CalibrationToolbar: React.FC<CalibrationToolbarProps> = ({
                     hasImage ? (
                       <span className="text-purple-200 flex items-center gap-1.5">
                         <span className="relative flex h-2 w-2">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-60" />
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-400 shadow-[0_0_5px_rgba(192,132,252,0.6)]" />
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75" />
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-400 shadow-[0_0_6px_#c084fc]" />
                         </span>
                         Click start corner of wall
                       </span>
@@ -171,7 +171,7 @@ export const CalibrationToolbar: React.FC<CalibrationToolbarProps> = ({
             {isPointsComplete && !isFeetValid && (
               <div
                 id="step-2-purple-glow"
-                className="absolute -inset-0.5 rounded-2xl bg-gradient-to-r from-purple-600/70 via-fuchsia-500/60 to-indigo-600/70 opacity-45 blur-md pointer-events-none transition-opacity duration-500"
+                className="purple-halo-bg transition-opacity duration-500"
                 aria-hidden="true"
               />
             )}
@@ -182,7 +182,7 @@ export const CalibrationToolbar: React.FC<CalibrationToolbarProps> = ({
                 isFeetValid
                   ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-200'
                   : isPointsComplete
-                  ? 'bg-slate-900/95 border-purple-500/45 text-purple-100 shadow-[0_0_15px_rgba(168,85,247,0.22)] ring-1 ring-purple-500/25'
+                  ? 'purple-glow-card text-purple-100'
                   : 'bg-slate-800/90 border-slate-700 text-slate-400 opacity-60'
               }`}
             >
@@ -191,7 +191,7 @@ export const CalibrationToolbar: React.FC<CalibrationToolbarProps> = ({
                   isFeetValid
                     ? 'bg-emerald-500 text-slate-950 shadow-[0_0_10px_rgba(16,185,129,0.5)]'
                     : isPointsComplete
-                    ? 'bg-gradient-to-br from-purple-500 to-indigo-600 text-white shadow-[0_0_8px_rgba(168,85,247,0.4)]'
+                    ? 'purple-badge-circle'
                     : 'bg-slate-700 text-slate-400'
                 }`}
               >
@@ -289,7 +289,7 @@ export const CalibrationToolbar: React.FC<CalibrationToolbarProps> = ({
             {isCalibrated && (
               <div
                 id="btn-calibrate-export-purple-glow"
-                className="absolute -inset-1.5 rounded-2xl bg-gradient-to-r from-purple-500 via-fuchsia-500 to-indigo-500 opacity-75 group-hover:opacity-100 blur-lg pointer-events-none transition-all duration-300 animate-pulse"
+                className="purple-halo-bg !-inset-1.5 !opacity-80 group-hover:!opacity-100 animate-pulse transition-all duration-300"
                 aria-hidden="true"
               />
             )}
@@ -299,9 +299,9 @@ export const CalibrationToolbar: React.FC<CalibrationToolbarProps> = ({
               type="button"
               disabled={!isCalibrated}
               onClick={onTriggerCalibration}
-              className={`relative inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer ${
+              className={`relative inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 isCalibrated
-                  ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-[0_0_25px_rgba(168,85,247,0.65)] ring-2 ring-purple-400/80 hover:ring-purple-300 hover:shadow-[0_0_35px_rgba(192,132,252,0.85)]'
+                  ? 'purple-glow-button text-white'
                   : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700/60'
               }`}
             >
