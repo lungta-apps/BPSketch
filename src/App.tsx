@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { Globe, ExternalLink } from 'lucide-react';
 import { Header } from './components/Header';
 import { CalibrationToolbar } from './components/CalibrationToolbar';
 import { BlueprintCanvas } from './components/BlueprintCanvas';
@@ -399,6 +400,34 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {/* App Footer with Copyright & Author Website */}
+      <footer
+        id="app-footer"
+        className="h-8 border-t border-slate-800/90 bg-slate-950/95 px-4 flex items-center justify-between text-xs text-slate-400 select-none z-20 shrink-0"
+      >
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-slate-300">&copy; 2026 Bobbi Johnson</span>
+          <span className="text-slate-600">&bull;</span>
+          <a
+            id="author-website-link"
+            href="https://bobbijohnson.dev"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-400 hover:text-blue-300 transition-colors inline-flex items-center gap-1 font-medium hover:underline underline-offset-2"
+          >
+            <Globe className="w-3.5 h-3.5 opacity-75" />
+            <span>bobbijohnson.dev</span>
+            <ExternalLink className="w-3 h-3 opacity-60 ml-0.5" />
+          </a>
+        </div>
+
+        <div className="hidden sm:flex items-center gap-2 text-[11px] text-slate-500">
+          <span>Apex Blueprint Scaler</span>
+          <span>&bull;</span>
+          <span>1:1 Scale &bull; 96 DPI Tracing Calibration</span>
+        </div>
+      </footer>
 
       {/* Export & Apex 10' Grid Verification Modal */}
       <ApexGridPreviewModal

@@ -112,6 +112,13 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
         }
       }
 
+      // Escape to cancel point placement
+      if (e.key === 'Escape' && points.length > 0) {
+        e.preventDefault();
+        onPointsChange([]);
+        return;
+      }
+
       // Keyboard arrow nudge for selected point
       if (selectedPointIndex !== null && points[selectedPointIndex]) {
         let dx = 0;
@@ -1021,7 +1028,9 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
 
           {/* STEP 1: Point Placement Prompt (only when not in crop mode) */}
           {!isCropMode && points.length < 2 && (
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-slate-900/90 text-slate-200 border border-slate-700/80 px-4 py-2 rounded-full text-xs shadow-lg backdrop-blur-md pointer-events-none flex items-center gap-2.5 z-10">
+            <div className={`absolute top-3 left-1/2 -translate-x-1/2 bg-slate-900/95 text-slate-200 border px-4 py-2 rounded-full text-xs shadow-xl backdrop-blur-md flex items-center gap-3 z-10 ${
+              points.length === 1 ? 'border-amber-500/50 pointer-events-auto' : 'border-slate-700/80 pointer-events-none'
+            }`}>
               {points.length === 0 && (
                 <>
                   <span className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-pulse shrink-0" />
@@ -1032,50 +1041,26 @@ export const BlueprintCanvas: React.FC<BlueprintCanvasProps> = ({
               )}
               {points.length === 1 && (
                 <>
-                  <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
-                  <span>
-                    <strong className="text-white">Step 1:</strong> Now click the <strong>end corner</strong> of that wall. (Hold <strong>Shift</strong> to snap).
-                  </span>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* STEP 2: Wall Dimension Prompt (Appears immediately after 2 points placed, not in crop mode) */}
-          {!isCropMode && points.length === 2 && (!knownFeetInput || !calculation) && (
-            <div
-              onMouseDown={(e) => e.stopPropagation()}
-              onMouseUp={(e) => e.stopPropagation()}
-              onClick={(e) => e.stopPropagation()}
-              className="absolute top-3 left-1/2 -translate-x-1/2 bg-slate-900/95 border-2 border-blue-500 text-slate-100 px-5 py-3 rounded-2xl shadow-2xl backdrop-blur-md z-20 flex flex-col sm:flex-row items-center gap-3 animate-in fade-in zoom-in-95"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-md">
-                  2
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-white flex items-center gap-2">
-                    <span>Wall Measured: {Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y).toFixed(0)} px</span>
-                    <span className="text-[10px] uppercase font-bold text-blue-300 bg-blue-950 px-2 py-0.5 rounded border border-blue-800">
-                      Step 2: Enter Dimension
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
+                    <span>
+                      <strong className="text-white">Step 1:</strong> Click the <strong>end corner</strong> of that wall.
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-300 mt-0.5">
-                    Enter the length printed on your blueprint for this wall:
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={knownFeetInput}
-                  onChange={(e) => onKnownFeetChange(e.target.value)}
-                  placeholder="e.g. 24 or 30' 0&quot;"
-                  autoFocus
-                  className="w-28 sm:w-32 px-3 py-1.5 text-xs font-mono font-bold bg-slate-950 border-2 border-blue-400 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder:text-slate-500"
-                />
-                <span className="text-xs font-bold text-slate-300">ft</span>
-              </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onPointsChange([]);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-500/25 hover:bg-rose-950/90 text-amber-200 hover:text-rose-200 border border-amber-400/60 hover:border-rose-400/80 transition cursor-pointer shadow-sm ml-1"
+                    title="Clear this point and start over (or press Esc)"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 text-amber-300 stroke-[2.5]" />
+                    <span>Re-measure</span>
+                  </button>
+                </>
+              )}
             </div>
           )}
 
